@@ -5,6 +5,8 @@ use warnings;
 use utf8;
 use 5.016;
 
+use Getopt::Long;
+use Pod::Usage;
 use IO::Compress::Gzip qw(gzip $GzipError);
 use Archive::Tar;
 
@@ -13,8 +15,8 @@ use Net::OpenSSH;
 
 # config for bash 
 sub ubash {
-    my $ursshhome = shift;
-    return <<EOF
+  my $ursshhome = shift;
+  return <<EOF
 #!/usr/bin/env bash 
 
 exec bash --rcfile <(echo '
@@ -29,86 +31,99 @@ EOF
 
 # setup for a local config dir in the $HOME for the current user
 sub setup {
-    my $ursshrc_d = "$ENV{HOME}/.ursshrc.d";
-    if(-d $ursshrc_d) {
-        if(-e "$ursshrc_d/urbashrc") {return;} 
-        else {
-            open(my $fh, ">$ursshrc_d/urbashrc") || die "Can't create a urbashrc config file: $!";
-            print $fh "# Automaticaly generated file, you can set up your bash here. ";
-            close $fh;
-            return;
-        }
-    } else { 
-        say "Initial setup..";
-        say "Creating $ursshrc_d and $ursshrc_d/urbashrc..";
-        mkdir $ursshrc_d || die "Can't create a $ursshrc_d folder: $!";
-        setup();
+  my $ursshrc_d = "$ENV{HOME}/.ursshrc.d";
+  if(-d $ursshrc_d) {
+    if(-e "$ursshrc_d/urbashrc") {return;} 
+    else {
+      open(my $fh, ">$ursshrc_d/urbashrc") || die "Can't create a urbashrc config file: $!";
+      print $fh "# Automaticaly generated file, you can set up your bash here. ";
+      close $fh;
+      return;
     }
+  } else { 
+    say "Initial setup..";
+    say "Creating $ursshrc_d and $ursshrc_d/urbashrc..";
+    mkdir $ursshrc_d || die "Can't create a $ursshrc_d folder: $!";
+    setup();
+  }
 }
 
 # recursive directory traverser, return the full file list as ref to an array
 sub dir_traverse {
-    my $dir = "$ENV{HOME}/.ursshrc.d";
-    my @collector;
-    if (-d $dir) {
-      opendir(my $dh, $dir) || die "Can't open the directory $dir: $!";
-      my @curr_dir_content = grep { $_ ne '.' && $_ ne '..' } readdir($dh);
-      closedir $dh;
-      foreach my $file (@curr_dir_content) {
-          my $path = "$dir/$file";
-          if (-d $path) {
-              push @collector, $_ for @{dir_traverse($path)};
-          } else {
-              push @collector, $path if -f $path; 
-          }
+  my $dir = "$ENV{HOME}/.ursshrc.d";
+  my @collector;
+  if (-d $dir) {
+    opendir(my $dh, $dir) || die "Can't open the directory $dir: $!";
+    my @curr_dir_content = grep { $_ ne '.' && $_ ne '..' } readdir($dh);
+    closedir $dh;
+    foreach my $file (@curr_dir_content) {
+      my $path = "$dir/$file";
+      if (-d $path) {
+        push @collector, $_ for @{dir_traverse($path)};
+      } else {
+        push @collector, $path if -f $path; 
       }
-    } else {
-      setup();
     }
-    return \@collector;
+  } else {
+    setup();
+  }
+  return \@collector;
 }
 
 sub main {
-    my $connect_info = shift;
-    
-    setup();
-    
-    my $ssh = Net::OpenSSH->new(
-        $connect_info, 
-        timeout => 10, 
-        async => 1, 
-        forward_X11 => 1
-    );
-    $ssh->error && die "Can't open a connection: $!";
-    
-    # prepare a tmp home directory
-    my $ursshhome = $ssh->capture({ timeout => 10 }, "mktemp -t -d .urssh.XXXXXXXX");
-    $ssh->error && die "Can't create a tmp home: $!";
-    chomp $ursshhome;
-    
-    # creating in-memory archive to keep all the files from .ursshrc.d/ directory
-    my $tar = Archive::Tar->new;
-    foreach my $file (@{dir_traverse()}) {
-      open(my $fh, $file);
-      $tar->add_data($1, <$fh>) if $file =~ /(\.ursshrc\.d\/.+)$/;
-      close $fh;
-    }
-    my $input = $tar->write();
-    my $gzip_buffer;
-    gzip \$input => \$gzip_buffer || die "Failied to created a gzip: $GzipError";
-    
-    $ssh->system({stdin_data => $gzip_buffer}, "tar xz -C $ursshhome/");
-    $ssh->system({stdin_data => ubash(\$ursshhome)}, "cat > '$ursshhome/urbash'");
-    $ssh->system("chmod +x '$ursshhome/urbash'");
-    
-    # login
-    $ssh->system({tty => 1},"export URSSH_HOME='$ursshhome' && '$ursshhome/urbash'");
+  my $connect_info = shift;
+  
+  setup();
+  
+  my $ssh = Net::OpenSSH->new(
+    $connect_info, 
+    timeout => 10, 
+    async => 1, 
+    forward_X11 => 1
+  );
+  $ssh->error && die "Can't open a connection: $!";
+  
+  # prepare a tmp home directory
+  my $ursshhome = $ssh->capture({ timeout => 10 }, "mktemp -t -d .urssh.XXXXXXXX");
+  $ssh->error && die "Can't create a tmp home: $!";
+  chomp $ursshhome;
+  
+  # creating in-memory archive to keep all the files from .ursshrc.d/ directory
+  my $tar = Archive::Tar->new;
+  foreach my $file (@{dir_traverse()}) {
+    open(my $fh, $file);
+    $tar->add_data($1, <$fh>) if $file =~ /(\.ursshrc\.d\/.+)$/;
+    close $fh;
+  }
+  my $input = $tar->write();
+  my $gzip_buffer;
+  gzip \$input => \$gzip_buffer || die "Failied to created a gzip: $GzipError";
+  
+  $ssh->system({stdin_data => $gzip_buffer}, "tar xz -C $ursshhome/");
+  $ssh->system({stdin_data => ubash(\$ursshhome)}, "cat > '$ursshhome/urbash'");
+  $ssh->system("chmod +x '$ursshhome/urbash'");
+  
+  # login
+  $ssh->system({tty => 1},"export URSSH_HOME='$ursshhome' && '$ursshhome/urbash'");
 
-    # cleanup
-    $ssh->system("rm -rf '$ursshhome'");
+  # cleanup
+  $ssh->system("rm -rf '$ursshhome'");
 }
 
-main($ARGV[0]);
+# help section
+my $help = 0;
+my $man = 0;
+my $connect_info = 0;
+
+GetOptions('help|?' => \$help, man => \$man, 'connect' => \$connect_info);
+pod2usage(1) if $help;
+pod2usage(-verbose => 2) if $man;
+pod2usage("$0: No connection string was given")  if scalar @ARGV == 0;
+
+$connect_info = $ARGV[0] if $connect_info == 0;
+
+main($connect_info);
+
 
 __END__
 
@@ -118,19 +133,48 @@ __END__
 
 urSSH -  Your SSH Client
 
+=head1 SYNOPSIS
+
+urssh [options] B<[user:[password@]]host[:port]>
+
+  Options:
+    --help      brief help message
+    --man       full documention page
+    --connect   connection string
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help>
+
+Print a brief help message and exits 
+
+=item B<--man>
+
+Print the manual page with full description
+
+=item B<--connect>
+
+Take a string as B<[user:[password@]]host[:port]> which will be use to making a connection
+
+=back
+
 =head1 DESCRIPTION
 
 This simple script gives a possibility to connect over SSH to remote host and to take all your
 config files with you. It depends on only one perl package B<Net::OpenSSH>, which  should be installed. 
 All you need to do is to place all the configs and other files you want to take with you 
 over ssh to B<$HOME/.ursshrc.d> and then edit config file for for modified bash B<$HOME/.urbashrc.d/urbashrc>
+in order to use those configs and files. You should remember the more things (the bigger they will be), the 
+longer you will need to wait until connection will get opened.
 
 Example:
     $> echo "PGHOST=10.10.10.1" >> $HOME/.ursshrc.d/urbashrc
     $> urssh 10.10.10.2
 
 There is a possibility to specify login and password with hostname/IP in the connection string. In order 
-to support this the perl package B<IO::Pty> should be installed.
+to support this the perl package B<IO::Pty> should be installed. Then one can use next connection string:
 
 Example:
     $> urssh user:p@sw00RD@10.10.10.2
