@@ -33,9 +33,9 @@ sub setup {
     if(-d $ursshrc_d) {
         if(-e "$ursshrc_d/urbashrc") {return;} 
         else {
-            open FH, ">$ursshrc_d/urbashrc" || die "Can't create a urbashrc config file: $!";
-            print FH "# Automaticaly generated file, you can set up your bash here. ";
-            close FH;
+            open(my $fh, ">$ursshrc_d/urbashrc") || die "Can't create a urbashrc config file: $!";
+            print $fh "# Automaticaly generated file, you can set up your bash here. ";
+            close $fh;
             return;
         }
     } else { 
