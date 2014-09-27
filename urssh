@@ -1,0 +1,147 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use utf8;
+use 5.016;
+
+use IO::Compress::Gzip qw(gzip $GzipError);
+use Archive::Tar;
+
+use Net::OpenSSH;
+
+
+# config for bash 
+sub ubash {
+    my $ursshhome = shift;
+    return <<EOF
+#!/usr/bin/env bash 
+
+exec bash --rcfile <(echo '
+if [ -e /etc/bash.bashrc ]; then . /etc/bash.bashrc; fi
+if [ -e ~/.bashrc ]; then . ~/.bashrc; fi
+if [ -e '$$ursshhome'/.ursshrc.d/urbashrc ]; then . '$$ursshhome'/.ursshrc.d/urbashrc; fi
+export PATH=\$PATH:'$$ursshhome'
+') "\$@"
+
+EOF
+}
+
+# setup for a local config dir in the $HOME for the current user
+sub setup {
+    my $ursshrc_d = "$ENV{HOME}/.ursshrc.d";
+    if(-d $ursshrc_d) {
+        if(-e "$ursshrc_d/urbashrc") {return;} 
+        else {
+            open FH, ">$ursshrc_d/urbashrc" || die "Can't create a urbashrc config file: $!";
+            print FH "# Automaticaly generated file, you can set up your bash here. ";
+            close FH;
+            return;
+        }
+    } else { 
+        say "Initial setup..";
+        say "Creating $ursshrc_d and $ursshrc_d/urbashrc..";
+        mkdir $ursshrc_d || die "Can't create a $ursshrc_d folder: $!";
+        setup();
+    }
+}
+
+# recursive directory traverser, return the full file list as ref to an array
+sub dir_traverse {
+    my $dir = "$ENV{HOME}/.ursshrc.d";
+    my @collector;
+    if (-d $dir) {
+      opendir(my $dh, $dir) || die "Can't open the directory $dir: $!";
+      my @curr_dir_content = grep { $_ ne '.' && $_ ne '..' } readdir($dh);
+      closedir $dh;
+      foreach my $file (@curr_dir_content) {
+          my $path = "$dir/$file";
+          if (-d $path) {
+              push @collector, $_ for @{dir_traverse($path)};
+          } else {
+              push @collector, $path if -f $path; 
+          }
+      }
+    } else {
+      setup();
+    }
+    return \@collector;
+}
+
+sub main {
+    my $connect_info = shift;
+    
+    setup();
+    
+    my $ssh = Net::OpenSSH->new(
+        $connect_info, 
+        timeout => 10, 
+        async => 1, 
+        forward_X11 => 1
+    );
+    $ssh->error && die "Can't open a connection: $!";
+    
+    # prepare a tmp home directory
+    my $ursshhome = $ssh->capture({ timeout => 10 }, "mktemp -t -d .urssh.XXXXXXXX");
+    $ssh->error && die "Can't create a tmp home: $!";
+    chomp $ursshhome;
+    
+    # creating in-memory archive to keep all the files from .ursshrc.d/ directory
+    my $tar = Archive::Tar->new;
+    foreach my $file (@{dir_traverse()}) {
+      open(my $fh, $file);
+      $tar->add_data($1, <$fh>) if $file =~ /(\.ursshrc\.d\/.+)$/;
+      close $fh;
+    }
+    my $input = $tar->write();
+    my $gzip_buffer;
+    gzip \$input => \$gzip_buffer || die "Failied to created a gzip: $GzipError";
+    
+    $ssh->system({stdin_data => $gzip_buffer}, "tar xz -C $ursshhome/");
+    $ssh->system({stdin_data => ubash(\$ursshhome)}, "cat > '$ursshhome/urbash'");
+    $ssh->system("chmod +x '$ursshhome/urbash'");
+    
+    # login
+    $ssh->system({tty => 1},"export URSSH_HOME='$ursshhome' && '$ursshhome/urbash'");
+
+    # cleanup
+    $ssh->system("rm -rf '$ursshhome'");
+}
+
+main($ARGV[0]);
+
+__END__
+
+=pod
+
+=head1 NAME
+
+urSSH -  Your SSH Client
+
+=head1 DESCRIPTION
+
+This simple script gives a possibility to connect over SSH to remote host and to take all your
+config files with you. It depends on only one perl package B<Net::OpenSSH>, which  should be installed. 
+All you need to do is to place all the configs and other files you want to take with you 
+over ssh to B<$HOME/.ursshrc.d> and then edit config file for for modified bash B<$HOME/.urbashrc.d/urbashrc>
+
+Example:
+    $> echo "PGHOST=10.10.10.1" >> $HOME/.ursshrc.d/urbashrc
+    $> urssh 10.10.10.2
+
+There is a possibility to specify login and password with hostname/IP in the connection string. In order 
+to support this the perl package B<IO::Pty> should be installed.
+
+Example:
+    $> urssh user:p@sw00RD@10.10.10.2
+
+
+=head1 AUTHOR
+
+Oleksandr Kylymnychenko, oleksandr@nerdydev.net
+
+=head1 COPYRIGHT AND LICENSE
+
+GNU GPL, Version 2
+
+=cut
