@@ -113,16 +113,13 @@ sub main {
 # help section
 my $help = 0;
 my $man = 0;
-my $connect_info = 0;
 
-GetOptions('help|?' => \$help, man => \$man, 'connect' => \$connect_info);
+GetOptions('help|?' => \$help, man => \$man);
 pod2usage(1) if $help;
 pod2usage(-verbose => 2) if $man;
 pod2usage("$0: No connection string was given")  if scalar @ARGV == 0;
 
-$connect_info = $ARGV[0] if $connect_info == 0;
-
-main($connect_info);
+main($ARGV[0]);
 
 
 __END__
@@ -140,7 +137,6 @@ urssh [options] B<[user:[password@]]host[:port]>
   Options:
     --help      brief help message
     --man       full documention page
-    --connect   connection string
 
 =head1 OPTIONS
 
@@ -153,10 +149,6 @@ Print a brief help message and exits
 =item B<--man>
 
 Print the manual page with full description
-
-=item B<--connect>
-
-Take a string as B<[user:[password@]]host[:port]> which will be use to making a connection
 
 =back
 
