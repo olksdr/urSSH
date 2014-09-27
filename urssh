@@ -31,49 +31,46 @@ EOF
 
 # setup for a local config dir in the $HOME for the current user
 sub setup {
-  my $ursshrc_d = "$ENV{HOME}/.ursshrc.d";
-  if(-d $ursshrc_d) {
-    if(-e "$ursshrc_d/urbashrc") {return;} 
+  my $ursshrc_d = shift;
+  if(-d $$ursshrc_d) {
+    if(-e "$$ursshrc_d/urbashrc") {return;} 
     else {
-      open(my $fh, ">$ursshrc_d/urbashrc") || die "Can't create a urbashrc config file: $!";
+      open(my $fh, ">$$ursshrc_d/urbashrc") || die "Can't create a urbashrc config file: $!";
       print $fh "# Automaticaly generated file, you can set up your bash here. ";
       close $fh;
       return;
     }
   } else { 
     say "Initial setup..";
-    say "Creating $ursshrc_d and $ursshrc_d/urbashrc..";
-    mkdir $ursshrc_d || die "Can't create a $ursshrc_d folder: $!";
-    setup();
+    say "Creating $$ursshrc_d and $$ursshrc_d/urbashrc..";
+    mkdir $$ursshrc_d || die "Can't create a $$ursshrc_d folder: $!";
+    setup($ursshrc_d);
   }
 }
 
 # recursive directory traverser, return the full file list as ref to an array
 sub dir_traverse {
-  my $dir = "$ENV{HOME}/.ursshrc.d";
+  my $dir = shift;
   my @collector;
-  if (-d $dir) {
-    opendir(my $dh, $dir) || die "Can't open the directory $dir: $!";
-    my @curr_dir_content = grep { $_ ne '.' && $_ ne '..' } readdir($dh);
-    closedir $dh;
-    foreach my $file (@curr_dir_content) {
-      my $path = "$dir/$file";
-      if (-d $path) {
-        push @collector, $_ for @{dir_traverse($path)};
-      } else {
-        push @collector, $path if -f $path; 
-      }
+  opendir(my $dh, $$dir) || die "Can't open the directory $$dir: $!";
+  my @curr_dir_content = grep { $_ ne '.' && $_ ne '..' } readdir($dh);
+  closedir $dh;
+  foreach my $file (@curr_dir_content) {
+    my $path = "$$dir/$file";
+    if (-d $path) {
+      push @collector, $_ for @{dir_traverse(\$path)};
+    } else {
+      push @collector, $path if -f $path; 
     }
-  } else {
-    setup();
   }
   return \@collector;
 }
 
 sub main {
   my $connect_info = shift;
+  my $ursshrc_d = "$ENV{HOME}/.ursshrc.d";
   
-  setup();
+  setup(\$ursshrc_d);
   
   my $ssh = Net::OpenSSH->new(
     $connect_info, 
@@ -90,7 +87,7 @@ sub main {
   
   # creating in-memory archive to keep all the files from .ursshrc.d/ directory
   my $tar = Archive::Tar->new;
-  foreach my $file (@{dir_traverse()}) {
+  foreach my $file (@{dir_traverse(\$ursshrc_d)}) {
     open(my $fh, $file);
     $tar->add_data($1, <$fh>) if $file =~ /(\.ursshrc\.d\/.+)$/;
     close $fh;
