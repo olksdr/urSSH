@@ -70,7 +70,7 @@ sub dir_traverse {
 }
 
 sub main {
-  my ($connect_info, $ursshrc_d) = @_;
+  my ($ursshrc_d, $connect_info, $cmd) = @_;
   
   my $ssh = Net::OpenSSH->new(
     $connect_info, 
@@ -79,6 +79,11 @@ sub main {
     forward_X11 => 1
   );
   $ssh->error && die "Can't open a connection: $!";
+
+  if($cmd) {
+    $ssh->system($cmd);
+    exit(0);
+  }
   
   # prepare a tmp home directory
   my $ursshhome = $ssh->capture({ timeout => 10 }, "mktemp -t -d .urssh.XXXXXXXX");
@@ -118,12 +123,12 @@ my $setup = 0;
 GetOptions('help|?' => \$help, man => \$man, 'setup' => \$setup);
 pod2usage(1) if $help;
 pod2usage(-verbose => 2) if $man;
-setup(\$ursshrc_d) && exit() if $setup;
+setup(\$ursshrc_d) && exit(0) if $setup;
 pod2usage("$0: No connection string was given")  if @ARGV == 0;
 
 setup(\$ursshrc_d) unless -f "$ursshrc_d/urbashrc";
 
-main($ARGV[0], \$ursshrc_d);
+main(\$ursshrc_d, @ARGV);
 
 
 __END__
@@ -136,7 +141,7 @@ urSSH -  Your SSH Client
 
 =head1 SYNOPSIS
 
-urssh [options] B<[user:[password@]]host[:port]>
+urssh [options] B<[user:[password@]]host[:port] ["command"]> 
 
   Options:
     --help      brief help message
@@ -169,17 +174,23 @@ config files with you. It depends on only one perl package B<Net::OpenSSH>, whic
 All you need to do is to place all the configs and other files you want to take with you 
 over ssh to B<$HOME/.ursshrc.d> and then edit config file for for modified bash B<$HOME/.urbashrc.d/urbashrc>
 in order to use those configs and files. You should remember the more things (the bigger they will be), the 
-longer you will need to wait until connection will get opened.
+longer you will need to wait until connection will get opened:
 
-Example:
-    $> echo "PGHOST=10.10.10.1" >> $HOME/.ursshrc.d/urbashrc
-    $> urssh 10.10.10.2
+    C<
+      echo "PGHOST=10.10.10.1" >> $HOME/.ursshrc.d/urbashrc
+      urssh 10.10.10.2
+    >
 
 There is a possibility to specify login and password with hostname/IP in the connection string. In order 
 to support this the perl package B<IO::Pty> should be installed. Then one can use next connection string:
 
-Example:
-    $> urssh user:p@sw00RD@10.10.10.2
+    C<urssh user:p@sw00RD@10.10.10.2>
+
+The script supports running single commands as well:
+
+    C<urssh 10.10.10.2 "ls -la">
+
+which will list your home directory
 
 
 =head1 AUTHOR
