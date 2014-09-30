@@ -101,8 +101,8 @@ sub main {
   my $gzip_buffer;
   gzip \$input => \$gzip_buffer || die "Failied to created a gzip: $GzipError";
   
-  $ssh->system({stdin_data => $gzip_buffer, async => 1}, "tar xmz -C $ursshhome/");
-  $ssh->system({stdin_data => ubash(\$ursshhome), async => 1}, "cat > '$ursshhome/urbash'");
+  $ssh->system({stdin_data => $gzip_buffer}, "tar xmz -C $ursshhome/");
+  $ssh->system({stdin_data => ubash(\$ursshhome)}, "cat > '$ursshhome/urbash'");
   $ssh->system("chmod +x '$ursshhome/urbash'");
   
   # login
