@@ -141,7 +141,7 @@ urSSH -  Your SSH Client
 
 =head1 SYNOPSIS
 
-urssh [options] B<[user:[password@]]host[:port] ["command"]> 
+urssh [options] B<[user:[password@]]host[:port] ['command']> 
 
   Options:
     --help      brief help message
@@ -176,19 +176,18 @@ over ssh to B<$HOME/.ursshrc.d> and then edit config file for for modified bash 
 in order to use those configs and files. You should remember the more things (the bigger they will be), the 
 longer you will need to wait until connection will get opened:
 
-    C<
-      echo "PGHOST=10.10.10.1" >> $HOME/.ursshrc.d/urbashrc
-      urssh 10.10.10.2
-    >
+C<echo 'PGHOST=10.10.10.1' E<gt>E<gt> $HOME/.ursshrc.d/urbashrc>
+
+C<urssh 10.10.10.2>
 
 There is a possibility to specify login and password with hostname/IP in the connection string. In order 
 to support this the perl package B<IO::Pty> should be installed. Then one can use next connection string:
 
-    C<urssh user:p@sw00RD@10.10.10.2>
+C<urssh user:p@sw00RD@10.10.10.2>
 
 The script supports running single commands as well:
 
-    C<urssh 10.10.10.2 "ls -la">
+C<urssh 10.10.10.2 'ls -la'>
 
 which will list your home directory
 
