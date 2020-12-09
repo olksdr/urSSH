@@ -17,7 +17,7 @@ In the config files you can use next variables:
 * *$URSSHRC_D* - which points to  **.urbashrc.d** of temporary home (see below) on the remote host
 * *$URSSH_HOME* - which points to temporary home on the remote host
 
-####Example
+#### Example
 Let's say you want to create a custom environment for a specific host, so we can create next folder/files structure
 
 ```
@@ -30,7 +30,7 @@ $HOME/.ursshrc.d/
 
 with next contents:
 
-######urbashrc
+###### urbashrc
 
 ```bash
 # reading exteranl config file for Server1
@@ -38,7 +38,7 @@ source $URSSHRC_D/server1rc
 
 ```
 
-######server1rc
+###### server1rc
 
 ```bash
 # here can be some useful information
